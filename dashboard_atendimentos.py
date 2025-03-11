@@ -88,6 +88,12 @@ if uploaded_file:
         fig5 = px.bar(prioridade_counts, x='Prioridade', y='Quantidade', title='Distribuição de Atendimentos por Prioridade')
         st.plotly_chart(fig5)
 
+     # Exibir contagem de prioridades
+    st.write("Contagem de Atendimentos por Prioridade:", prioridade_counts)
+
+    # Visualização dos dados ao final
+    st.write("Visualização dos dados:", df_clean)
+
     # Análise combinada de Profissional e Especialidade
     if 'Profissional' in df_clean.columns and 'Especialidade' in df_clean.columns:
         prof_esp_counts = df_clean.groupby(['Profissional', 'Especialidade']).size().reset_index(name='Quantidade')
