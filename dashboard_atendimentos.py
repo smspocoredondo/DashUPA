@@ -4,7 +4,7 @@ import plotly.express as px
 
 # Título da aplicação
 st.set_page_config(page_title='Dashboard UPA 24H', layout='wide')
-st.title('Análises de Atendimentos UPA 24H')
+st.title('Análises de Atendimentos - UPA 24H Dona Zulmira Soares')
 
 # Sidebar
 st.sidebar.header('Filtros')
