@@ -81,6 +81,13 @@ if uploaded_file:
         fig4 = px.line(profissionais_top10, x='Profissional', y='Quantidade de Atendimentos', title='Top 10 Profissionais com Mais Atendimentos (Gráfico Linear)')
         st.plotly_chart(fig4)
 
+    # Gráfico de Prioridade
+    if 'Prioridade' in df_clean.columns:
+        prioridade_counts = df_clean['Prioridade'].value_counts().reset_index()
+        prioridade_counts.columns = ['Prioridade', 'Quantidade']
+        fig5 = px.bar(prioridade_counts, x='Prioridade', y='Quantidade', title='Distribuição de Atendimentos por Prioridade')
+        st.plotly_chart(fig5)
+
     # Análise combinada de Profissional e Especialidade
     if 'Profissional' in df_clean.columns and 'Especialidade' in df_clean.columns:
         prof_esp_counts = df_clean.groupby(['Profissional', 'Especialidade']).size().reset_index(name='Quantidade')
