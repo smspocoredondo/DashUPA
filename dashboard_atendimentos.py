@@ -91,9 +91,7 @@ if uploaded_file:
      # Exibir contagem de prioridades
     st.write("Contagem de Atendimentos por Prioridade:", prioridade_counts)
 
-    # Visualização dos dados ao final
-    st.write("Visualização dos dados:", df_clean)
-
+  
     # Análise combinada de Profissional e Especialidade
     if 'Profissional' in df_clean.columns and 'Especialidade' in df_clean.columns:
         prof_esp_counts = df_clean.groupby(['Profissional', 'Especialidade']).size().reset_index(name='Quantidade')
