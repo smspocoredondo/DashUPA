@@ -35,6 +35,9 @@ if uploaded_file:
     if cid10_filter:
         df_clean = df_clean[df_clean['Cid10'].isin(cid10_filter)]
 
+    if prioridade_filter:
+        df_clean = df_clean[df_clean['Prioridade'].isin(prioridade_filter)]
+
     col1, col2 = st.columns(2)
 
     # Gráfico de especialidades
