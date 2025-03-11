@@ -41,7 +41,7 @@ if uploaded_file:
     if 'Especialidade' in df_clean.columns:
         especialidades = df_clean['Especialidade'].value_counts().reset_index()
         especialidades.columns = ['Especialidade', 'Quantidade']
-        fig1 = px.pie(especialidades, names='Especialidade', values='Quantidade', title='Distribuição de Especialidades')
+        fig1 = px.pie(especialidades, names='Especialidade', values='Quantidade', title='% de Atendimenos por Categoria')
         col1.plotly_chart(fig1)
 
     # Seleção e contagem por categoria de profissional
