@@ -52,10 +52,11 @@ if uploaded_file:
         st.write("Contagem por Categoria Profissional:", categorias)
 
     # Gráfico de motivos de alta
-    if 'Motivo Alta' in df_clean.columns:
+   if 'Motivo Alta' in df_clean.columns:
         motivos_alta = df_clean['Motivo Alta'].value_counts().reset_index()
         motivos_alta.columns = ['Motivo Alta', 'Quantidade']
-        fig2 = px.bar(motivos_alta, x='Motivo Alta', y='Quantidade', title='Motivos de Alta')
+        fig2 = px.bar(motivos_alta, x='Motivo Alta', y='Quantidade', title='Motivos de Alta',
+                      color='Motivo Alta', color_discrete_sequence=px.colors.qualitative.Set1)
         col2.plotly_chart(fig2)
 
     # Gráfico de CID-10 - Somente os mais predominantes
