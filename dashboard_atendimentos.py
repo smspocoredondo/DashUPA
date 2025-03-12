@@ -82,11 +82,13 @@ if uploaded_file:
         fig4 = px.line(profissionais_top10, x='Profissional', y='Quantidade de Atendimentos', title='Top 10 Profissionais com Mais Atendimentos (Gráfico Linear)')
         st.plotly_chart(fig4)
 
-    # Gráfico de Prioridade
+   # Gráfico de Prioridade com cores personalizadas
     if 'Prioridade' in df_clean.columns:
         prioridade_counts = df_clean['Prioridade'].value_counts().reset_index()
         prioridade_counts.columns = ['Prioridade', 'Quantidade']
-        fig5 = px.bar(prioridade_counts, x='Prioridade', y='Quantidade', title='Distribuição de Atendimentos por Prioridade')
+        prioridade_colors = {"Não Urgente": "green", "Pouco Urgente": "blue", "Urgente": "orange", "Emergência": "red"}
+        fig5 = px.bar(prioridade_counts, x='Prioridade', y='Quantidade', title='Distribuição de Atendimentos por Prioridade',
+                      color='Prioridade', color_discrete_map=prioridade_colors)
         st.plotly_chart(fig5)
 
      # Exibir contagem de prioridades
