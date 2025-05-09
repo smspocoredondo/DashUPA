@@ -5,7 +5,7 @@ import plotly.express as px
 # 🧾 Configuração da Página
 title = 'Análises de Atendimentos - UPA 24H Dona Zulmira Soares'
 st.set_page_config(page_title=title, layout='wide')
-st.image('UPA.png', width=100)
+st.image('TESTEIRA PAINEL UPA1.png', width=100)
 st.title(title)
 
 # 📁 Sidebar - Upload e Filtros
