@@ -34,10 +34,10 @@ def criar_grafico_barra(df, coluna, titulo, top_n=10):
             y='Quantidade',
             title=titulo,
             color='Quantidade',
-            color_continuous_scale=['#D92309','#75F00A','#B8F059']  # Paleta de cores suaves
+            color_continuous_scale=['#D92309','#B8F059','#75F00A']  # Paleta de cores suaves
         )
         grafico.update_layout(
-            title_font=dict(size=20, color='darkblue'),
+            title_font=dict(size=20, color='white'),
             xaxis_title_font=dict(size=14),
             yaxis_title_font=dict(size=14),
             template='plotly_white'
