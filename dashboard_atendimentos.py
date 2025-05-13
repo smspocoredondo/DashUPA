@@ -34,7 +34,7 @@ def criar_grafico_barra(df, coluna, titulo, top_n=10):
             y='Quantidade',
             title=titulo,
             color='Quantidade',
-            color_continuous_scale=['#FF9999', '#99CCFF', '#99FF99']  # Paleta de cores suaves
+            color_continuous_scale=['#33F000', '#B8F059', '#F02700','#F01D0A']  # Paleta de cores suaves
         )
         grafico.update_layout(
             title_font=dict(size=20, color='darkblue'),
@@ -55,10 +55,10 @@ def criar_grafico_pizza(df, coluna, titulo, top_n=10):
             names=coluna,
             values='Quantidade',
             title=titulo,
-            color_discrete_sequence=['#FF9999', '#99CCFF', '#99FF99']  # Paleta de cores suaves
+            color_discrete_sequence=['#33F000', '#B8F059', '#F02700','#F01D0A']  # Paleta de cores suaves
         )
         grafico.update_layout(
-            title_font=dict(size=20, color='darkblue'),
+            title_font=dict(size=20, color='gray'),
             template='plotly_white'
         )
         return grafico
