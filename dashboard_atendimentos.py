@@ -34,7 +34,7 @@ def criar_grafico_barra(df, coluna, titulo, top_n=10):
             y='Quantidade',
             title=titulo,
             color='Quantidade',
-            color_continuous_scale=['#B8F059','#33F000','#F00011']  # Paleta de cores suaves
+            color_continuous_scale=['#F00011','#B8F059','#33F000']  # Paleta de cores suaves
         )
         grafico.update_layout(
             title_font=dict(size=20, color='darkblue'),
