@@ -34,7 +34,7 @@ def criar_grafico_barra(df, coluna, titulo, top_n=10):
             y='Quantidade',
             title=titulo,
             color='Quantidade',
-            color_continuous_scale=['#e0f2f1', '#4dd0e1', '#009688']  # tons saúde
+            color_continuous_scale=['#e0f2f1', '#4dd0e1', '#009688']
         )
         grafico.update_layout(
             title_font=dict(size=20, color='#009688'),
@@ -55,7 +55,7 @@ def criar_grafico_pizza(df, coluna, titulo, top_n=10):
             names=coluna,
             values='Quantidade',
             title=titulo,
-            color_discrete_sequence=['#e0f2f1', '#4dd0e1', '#009688', '#b2dfdb', '#80cbc4']  # tons saúde
+            color_discrete_sequence=['#e0f2f1', '#4dd0e1', '#009688', '#b2dfdb', '#80cbc4']
         )
         grafico.update_layout(
             title_font=dict(size=20, color='#009688'),
@@ -63,6 +63,17 @@ def criar_grafico_pizza(df, coluna, titulo, top_n=10):
         )
         return grafico
     return None
+
+# 🔠 Função para categorizar turno
+def categorizar_turno(hora):
+    if 6 <= hora < 12:
+        return 'Manhã (06:00-12:00)'
+    elif 12 <= hora < 18:
+        return 'Tarde (12:00-18:00)'
+    elif 18 <= hora < 24:
+        return 'Noite (18:00-00:00)'
+    else:
+        return 'Madrugada (00:00-06:00)'
 
 # 🚀 Processamento ao carregar arquivos
 if uploaded_files:
@@ -84,6 +95,28 @@ if uploaded_files:
     for coluna, filtro in filtros.items():
         if filtro:
             df_final = df_final[df_final[coluna].isin(filtro)]
+
+    # 📅 Tratamento de Data e Hora
+    if 'Data Atendimento' in df_final.columns:
+        df_final['Data Atendimento'] = pd.to_datetime(df_final['Data Atendimento'], errors='coerce')
+        df_final['Hora'] = df_final['Data Atendimento'].dt.hour
+        df_final['Turno'] = df_final['Hora'].apply(categorizar_turno)
+
+        # Filtro por intervalo de data
+        data_min, data_max = st.sidebar.date_input("Filtrar por intervalo de datas", [])
+        if data_min and data_max:
+            df_final = df_final[(df_final['Data Atendimento'] >= pd.to_datetime(data_min)) &
+                                (df_final['Data Atendimento'] <= pd.to_datetime(data_max))]
+
+        # Filtro por faixa de horário
+        hora_min, hora_max = st.sidebar.slider(
+            "Filtrar por horário de atendimento",
+            min_value=0,
+            max_value=23,
+            value=(0, 23),
+            step=1
+        )
+        df_final = df_final[df_final['Hora'].between(hora_min, hora_max)]
 
     # 🔢 Total geral de atendimentos com destaque visual
     total_atendimentos = len(df_final)
@@ -113,16 +146,16 @@ if uploaded_files:
         unsafe_allow_html=True
     )
 
-    # 🔢 Cards de atendimentos por especialidade (em colunas)
+    # 🔢 Cards de atendimentos por especialidade
     if 'Especialidade' in df_final.columns:
         especialidades = df_final['Especialidade'].dropna().unique()
         n = len(especialidades)
-        cols = st.columns(n if n < 4 else 4)  # Máximo de 4 cards por linha
+        cols = st.columns(n if n < 4 else 4)
 
         for idx, especialidade in enumerate(especialidades):
             total_especialidade = df_final[df_final['Especialidade'] == especialidade].shape[0]
-            cor_card = "#e6f9f0"  # verde-água claro
-            cor_borda = "#009688"  # teal (verde saúde)
+            cor_card = "#e6f9f0"
+            cor_borda = "#009688"
             esp_str = str(especialidade)
             icone = "🩺" if "Médico" in esp_str or "Clínico" in esp_str else "👩‍⚕️"
             with cols[idx % 4]:
@@ -140,7 +173,7 @@ if uploaded_files:
                     unsafe_allow_html=True
                 )
 
-    # 📈 Geração dos gráficos para cada coluna
+    # 📈 Gráficos por colunas específicas
     colunas_para_analisar = ['Especialidade', 'Motivo Alta', 'Usuário', 'Profissional', 'Prioridade', 'Cid10']
     top_n = st.sidebar.slider("Número de itens no gráfico", min_value=5, max_value=20, value=10, step=1)
     tipo_grafico = st.sidebar.selectbox("Selecione o tipo de gráfico", ["Barras", "Pizza"])
@@ -155,12 +188,8 @@ if uploaded_files:
             if grafico:
                 st.plotly_chart(grafico, use_container_width=True)
 
-    # 📈 Gráfico de séries temporais
+    # 📈 Gráfico temporal
     if 'Data Atendimento' in df_final.columns:
-        df_final['Data Atendimento'] = pd.to_datetime(df_final['Data Atendimento'])
-        data_min, data_max = st.sidebar.date_input("Filtrar por intervalo de datas", [])
-        if data_min and data_max:
-            df_final = df_final[(df_final['Data Atendimento'] >= data_min) & (df_final['Data Atendimento'] <= data_max)]
         atendimentos_por_data = df_final.groupby('Data Atendimento').size().reset_index(name='Quantidade')
         grafico_temporal = px.line(
             atendimentos_por_data,
@@ -179,7 +208,14 @@ if uploaded_files:
         )
         st.plotly_chart(grafico_temporal, use_container_width=True)
 
-    # 📊 Análise de correlação (cores saúde)
+    # 📈 Gráfico por Turno
+    if 'Turno' in df_final.columns:
+        st.subheader("Distribuição de Atendimentos por Turno")
+        grafico_turno = criar_grafico_barra(df_final, 'Turno', 'Atendimentos por Turno')
+        if grafico_turno:
+            st.plotly_chart(grafico_turno, use_container_width=True)
+
+    # 📊 Mapa de Correlação
     colunas_numericas = df_final.select_dtypes(include=['number']).columns
     if len(colunas_numericas) > 1:
         st.subheader("Mapa de Correlação")
@@ -197,3 +233,4 @@ if uploaded_files:
         st.plotly_chart(fig_corr, use_container_width=True)
 
     st.success("Análise concluída com sucesso!")
+
