@@ -215,6 +215,40 @@ if uploaded_files:
         if grafico_turno:
             st.plotly_chart(grafico_turno, use_container_width=True)
 
+        # 📊 Comparativo entre Turnos
+    if 'Turno' in df_final.columns:
+        st.subheader("📊 Comparativo entre Turnos")
+
+        # Contagem e porcentagem por turno
+        turno_counts = df_final['Turno'].value_counts().reset_index()
+        turno_counts.columns = ['Turno', 'Quantidade']
+        turno_counts['Percentual'] = (turno_counts['Quantidade'] / turno_counts['Quantidade'].sum() * 100).round(2)
+
+        col1, col2 = st.columns([2, 1])
+
+        # Gráfico de barras comparativo
+        with col1:
+            fig_comp_turnos = px.bar(
+                turno_counts,
+                x='Turno',
+                y='Quantidade',
+                text='Quantidade',
+                title="Comparação de Atendimentos por Turno",
+                color='Turno',
+                color_discrete_sequence=px.colors.sequential.Tealgrn
+            )
+            fig_comp_turnos.update_layout(
+                title_font=dict(size=20, color='#009688'),
+                template='plotly_white'
+            )
+            st.plotly_chart(fig_comp_turnos, use_container_width=True)
+
+        # Tabela com percentuais
+        with col2:
+            st.markdown("#### 🧾 Tabela Resumo")
+            st.dataframe(turno_counts.style.format({'Percentual': '{:.2f}%'}), use_container_width=True)
+
+
     # 📊 Mapa de Correlação
     colunas_numericas = df_final.select_dtypes(include=['number']).columns
     if len(colunas_numericas) > 1:
