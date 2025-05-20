@@ -23,7 +23,7 @@ def processar_planilha(file):
     df_clean = df_clean[1:].reset_index(drop=True)
     return df_clean
 
-# 📊 Função para gráfico de barras (cores saúde)
+# 📊 Funções de gráficos
 def criar_grafico_barra(df, coluna, titulo, top_n=10):
     if coluna in df.columns:
         contagem = df[coluna].value_counts().reset_index()
@@ -45,7 +45,6 @@ def criar_grafico_barra(df, coluna, titulo, top_n=10):
         return grafico
     return None
 
-# 📊 Função para gráfico de pizza (cores saúde)
 def criar_grafico_pizza(df, coluna, titulo, top_n=10):
     if coluna in df.columns:
         contagem = df[coluna].value_counts().reset_index()
@@ -64,29 +63,18 @@ def criar_grafico_pizza(df, coluna, titulo, top_n=10):
         return grafico
     return None
 
-# 🔠 Função para categorizar turno
-def categorizar_turno(hora):
-    if 6 <= hora < 12:
-        return 'Manhã (06:00-12:00)'
-    elif 12 <= hora < 18:
-        return 'Tarde (12:00-18:00)'
-    elif 18 <= hora < 24:
-        return 'Noite (18:00-00:00)'
-    else:
-        return 'Madrugada (00:00-06:00)'
-
-# 🚀 Processamento ao carregar arquivos
+# 🚀 Processamento
 if uploaded_files:
     dataframes = [processar_planilha(file) for file in uploaded_files]
     df_final = pd.concat(dataframes, ignore_index=True)
 
-    # 🎯 Validação de colunas esperadas
+    # 🎯 Validação
     colunas_esperadas = ['Especialidade', 'Motivo Alta', 'Usuário', 'Profissional', 'Prioridade', 'Cid10']
     for coluna in colunas_esperadas:
         if coluna not in df_final.columns:
-            st.warning(f"A coluna esperada '{coluna}' não foi encontrada nos dados carregados.")
+            st.warning(f"A coluna esperada '{coluna}' não foi encontrada.")
 
-    # 🎯 Filtros dinâmicos
+    # 🎯 Filtros
     colunas_disponiveis = df_final.columns.tolist()
     filtros = {
         col: st.sidebar.multiselect(f'Filtrar por {col}', df_final[col].unique())
@@ -96,29 +84,7 @@ if uploaded_files:
         if filtro:
             df_final = df_final[df_final[coluna].isin(filtro)]
 
-    # 📅 Tratamento de Data e Hora
-    if 'Data Atendimento' in df_final.columns:
-        df_final['Data Atendimento'] = pd.to_datetime(df_final['Data Atendimento'], errors='coerce')
-        df_final['Hora'] = df_final['Data Atendimento'].dt.hour
-        df_final['Turno'] = df_final['Hora'].apply(categorizar_turno)
-
-        # Filtro por intervalo de data
-        data_min, data_max = st.sidebar.date_input("Filtrar por intervalo de datas", [])
-        if data_min and data_max:
-            df_final = df_final[(df_final['Data Atendimento'] >= pd.to_datetime(data_min)) &
-                                (df_final['Data Atendimento'] <= pd.to_datetime(data_max))]
-
-        # Filtro por faixa de horário
-        hora_min, hora_max = st.sidebar.slider(
-            "Filtrar por horário de atendimento",
-            min_value=0,
-            max_value=23,
-            value=(0, 23),
-            step=1
-        )
-        df_final = df_final[df_final['Hora'].between(hora_min, hora_max)]
-
-    # 🔢 Total geral de atendimentos com destaque visual
+    # 🔢 Total Geral
     total_atendimentos = len(df_final)
     st.markdown("""
     <style>
@@ -126,10 +92,10 @@ if uploaded_files:
         transition: box-shadow 0.3s, transform 0.3s;
     }
     .card-hover:hover {
-        box-shadow: 0 4px 24px 0 rgba(0,150,136,0.25), 0 1.5px 8px 0 rgba(0,150,136,0.15);
+        box-shadow: 0 4px 24px rgba(0,150,136,0.25), 0 1.5px 8px rgba(0,150,136,0.15);
         transform: scale(1.03);
-        border-left: 12px solid #1976d2 !important;
-        background-color: #e3f2fd !important;
+        border-left: 12px solid #1976d2;
+        background-color: #e3f2fd;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -146,18 +112,16 @@ if uploaded_files:
         unsafe_allow_html=True
     )
 
-    # 🔢 Cards de atendimentos por especialidade
+    # 🔢 Cards por Especialidade
     if 'Especialidade' in df_final.columns:
         especialidades = df_final['Especialidade'].dropna().unique()
         n = len(especialidades)
         cols = st.columns(n if n < 4 else 4)
-
         for idx, especialidade in enumerate(especialidades):
             total_especialidade = df_final[df_final['Especialidade'] == especialidade].shape[0]
             cor_card = "#e6f9f0"
             cor_borda = "#009688"
-            esp_str = str(especialidade)
-            icone = "🩺" if "Médico" in esp_str or "Clínico" in esp_str else "👩‍⚕️"
+            icone = "🩺" if "Médico" in str(especialidade) or "Clínico" in str(especialidade) else "👩‍⚕️"
             with cols[idx % 4]:
                 st.markdown(
                     f"""
@@ -166,30 +130,36 @@ if uploaded_files:
                                 font-size:20px; font-weight:bold; color:{cor_borda};
                                 box-shadow: 0 2px 8px rgba(0,150,136,0.09); text-align:center;">
                         {icone}<br>
-                        {esp_str}<br>
+                        {especialidade}<br>
                         <span style="font-size:28px; color:#222;">{total_especialidade}</span>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
 
-    # 📈 Gráficos por colunas específicas
+    # 📊 Gráficos principais
     colunas_para_analisar = ['Especialidade', 'Motivo Alta', 'Usuário', 'Profissional', 'Prioridade', 'Cid10']
-    top_n = st.sidebar.slider("Número de itens no gráfico", min_value=5, max_value=20, value=10, step=1)
+    top_n = st.sidebar.slider("Número de itens no gráfico", 5, 20, 10)
     tipo_grafico = st.sidebar.selectbox("Selecione o tipo de gráfico", ["Barras", "Pizza"])
-
     for col in colunas_para_analisar:
         if col in df_final.columns:
             st.subheader(f"Análises para {col}")
             if tipo_grafico == "Barras":
-                grafico = criar_grafico_barra(df_final, col, f'Top {top_n} {col} Mais Frequentes', top_n=top_n)
+                grafico = criar_grafico_barra(df_final, col, f'Top {top_n} {col} Mais Frequentes', top_n)
             elif tipo_grafico == "Pizza":
-                grafico = criar_grafico_pizza(df_final, col, f'Top {top_n} {col} Mais Frequentes', top_n=top_n)
+                grafico = criar_grafico_pizza(df_final, col, f'Top {top_n} {col} Mais Frequentes', top_n)
             if grafico:
                 st.plotly_chart(grafico, use_container_width=True)
 
-    # 📈 Gráfico temporal
+    # 📈 Série temporal
     if 'Data Atendimento' in df_final.columns:
+        df_final['Data Atendimento'] = pd.to_datetime(df_final['Data Atendimento'], errors='coerce')
+        data_min, data_max = st.sidebar.date_input("Filtrar por intervalo de datas", [])
+        if data_min and data_max:
+            df_final = df_final[
+                (df_final['Data Atendimento'] >= pd.to_datetime(data_min)) & 
+                (df_final['Data Atendimento'] <= pd.to_datetime(data_max))
+            ]
         atendimentos_por_data = df_final.groupby('Data Atendimento').size().reset_index(name='Quantidade')
         grafico_temporal = px.line(
             atendimentos_por_data,
@@ -202,31 +172,47 @@ if uploaded_files:
         )
         grafico_temporal.update_layout(
             title_font=dict(size=20, color='#009688'),
-            xaxis_title_font=dict(size=14),
-            yaxis_title_font=dict(size=14),
             template='plotly_white'
         )
         st.plotly_chart(grafico_temporal, use_container_width=True)
 
-    # 📈 Gráfico por Turno
-    if 'Turno' in df_final.columns:
-        st.subheader("Distribuição de Atendimentos por Turno")
-        grafico_turno = criar_grafico_barra(df_final, 'Turno', 'Atendimentos por Turno')
-        if grafico_turno:
-            st.plotly_chart(grafico_turno, use_container_width=True)
+    # 🕒 Distribuição por Turno
+    if 'Hora Atendimento' in df_final.columns:
+        df_final['Hora Atendimento'] = pd.to_datetime(df_final['Hora Atendimento'], errors='coerce').dt.time
+
+    def classificar_turno(hora):
+        if pd.isna(hora):
+            return "Indefinido"
+        if hora >= pd.to_datetime("00:00").time() and hora < pd.to_datetime("06:00").time():
+            return "Madrugada (00:00-06:00)"
+        elif hora < pd.to_datetime("12:00").time():
+            return "Manhã (06:00-12:00)"
+        elif hora < pd.to_datetime("18:00").time():
+            return "Tarde (12:00-18:00)"
+        else:
+            return "Noite (18:00-00:00)"
+
+    if 'Hora Atendimento' in df_final.columns:
+        df_final['Turno'] = df_final['Hora Atendimento'].apply(classificar_turno)
+
+        st.subheader("📈 Distribuição de Atendimentos por Turno")
+        graf_turno = px.histogram(
+            df_final,
+            x='Turno',
+            title="Distribuição por Turno",
+            color='Turno',
+            color_discrete_sequence=px.colors.sequential.Teal
+        )
+        graf_turno.update_layout(template='plotly_white')
+        st.plotly_chart(graf_turno, use_container_width=True)
 
         # 📊 Comparativo entre Turnos
-    if 'Turno' in df_final.columns:
         st.subheader("📊 Comparativo entre Turnos")
-
-        # Contagem e porcentagem por turno
         turno_counts = df_final['Turno'].value_counts().reset_index()
         turno_counts.columns = ['Turno', 'Quantidade']
         turno_counts['Percentual'] = (turno_counts['Quantidade'] / turno_counts['Quantidade'].sum() * 100).round(2)
 
         col1, col2 = st.columns([2, 1])
-
-        # Gráfico de barras comparativo
         with col1:
             fig_comp_turnos = px.bar(
                 turno_counts,
@@ -237,19 +223,31 @@ if uploaded_files:
                 color='Turno',
                 color_discrete_sequence=px.colors.sequential.Tealgrn
             )
-            fig_comp_turnos.update_layout(
-                title_font=dict(size=20, color='#009688'),
-                template='plotly_white'
-            )
+            fig_comp_turnos.update_layout(template='plotly_white')
             st.plotly_chart(fig_comp_turnos, use_container_width=True)
-
-        # Tabela com percentuais
         with col2:
             st.markdown("#### 🧾 Tabela Resumo")
             st.dataframe(turno_counts.style.format({'Percentual': '{:.2f}%'}), use_container_width=True)
 
+        # 📊 Gráfico Empilhado: Turno x Especialidade
+        if 'Especialidade' in df_final.columns:
+            st.subheader("📊 Atendimentos por Especialidade e Turno")
+            graf_empilhado = px.histogram(
+                df_final,
+                x='Especialidade',
+                color='Turno',
+                title='Especialidades por Turno',
+                barmode='stack',
+                color_discrete_sequence=px.colors.sequential.Tealgrn
+            )
+            graf_empilhado.update_layout(
+                xaxis_title='Especialidade',
+                yaxis_title='Total de Atendimentos',
+                template='plotly_white'
+            )
+            st.plotly_chart(graf_empilhado, use_container_width=True)
 
-    # 📊 Mapa de Correlação
+    # 📈 Mapa de Correlação
     colunas_numericas = df_final.select_dtypes(include=['number']).columns
     if len(colunas_numericas) > 1:
         st.subheader("Mapa de Correlação")
@@ -260,11 +258,9 @@ if uploaded_files:
             color_continuous_scale=['#e0f2f1', '#4dd0e1', '#009688'],
             title="Correlação entre Variáveis"
         )
-        fig_corr.update_layout(
-            title_font=dict(size=20, color='#009688'),
-            template='plotly_white'
-        )
+        fig_corr.update_layout(template='plotly_white')
         st.plotly_chart(fig_corr, use_container_width=True)
 
     st.success("Análise concluída com sucesso!")
+
 
