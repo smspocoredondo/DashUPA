@@ -20,7 +20,7 @@ def processar_planilha(file):
     df_raw = pd.read_excel(file, skiprows=1)
     df_raw.columns = df_raw.iloc[0]
     df_clean = df_raw[1:].reset_index(drop=True)
-    df_clean.columns = df_clean.columns.str.strip()
+    df_clean.columns = df_clean.columns.astype(str).str.strip()
     return df_clean
 
 # 📊 Função para gráfico de barras
@@ -75,10 +75,15 @@ if uploaded_files:
             st.warning(f"A coluna esperada '{coluna}' não foi encontrada nos dados carregados.")
 
     colunas_disponiveis = df_final.columns.tolist()
-    filtros = {
-        col: st.sidebar.multiselect(f'Filtrar por {col}', df_final[col].dropna().unique())
-        for col in colunas_disponiveis
-    }
+    filtros = {}
+    for col in colunas_disponiveis:
+        try:
+            valores_unicos = df_final[col].dropna().unique().tolist()
+            if len(valores_unicos) > 0:
+                filtros[col] = st.sidebar.multiselect(f'Filtrar por {col}', valores_unicos)
+        except Exception as e:
+            st.sidebar.warning(f"Erro ao processar filtro para a coluna '{col}': {e}")
+
     for coluna, filtro in filtros.items():
         if filtro:
             df_final = df_final[df_final[coluna].isin(filtro)]
@@ -169,6 +174,7 @@ if uploaded_files:
         st.dataframe(resumo_esp)
 
     st.success("✅ Análise concluída com sucesso!")
+
 
 
 
