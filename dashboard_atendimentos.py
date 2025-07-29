@@ -17,11 +17,13 @@ uploaded_files = st.sidebar.file_uploader(
 
 # 🔍 Função para processar planilha
 def processar_planilha(file):
-    df_raw = pd.read_excel(file, skiprows=1)
-    df_raw.columns = df_raw.iloc[0]
-    df_clean = df_raw[1:].reset_index(drop=True)
-    df_clean.columns = df_clean.columns.astype(str).str.strip()
-    return df_clean
+    df_raw = pd.read_excel(file, skiprows=1, header=None)
+    df_raw = df_raw.dropna(how='all')
+    df_raw.columns = [
+        'CPF', 'Paciente', 'Data', 'Hora', 'Especialidade', 'Profissional',
+        'Motivo Alta', 'Procedimento', 'Cid10', 'Prioridade'
+    ]
+    return df_raw
 
 # 📊 Função para gráfico de barras
 def criar_grafico_barra(df, coluna, titulo, top_n=10):
@@ -69,11 +71,6 @@ if uploaded_files:
     dataframes = [processar_planilha(file) for file in uploaded_files]
     df_final = pd.concat(dataframes, ignore_index=True)
 
-    colunas_esperadas = ['Especialidade', 'Motivo Alta', 'Usuário', 'Profissional', 'Prioridade', 'Cid10', 'Procedimento']
-    for coluna in colunas_esperadas:
-        if coluna not in df_final.columns:
-            st.warning(f"A coluna esperada '{coluna}' não foi encontrada nos dados carregados.")
-
     colunas_disponiveis = df_final.columns.tolist()
     filtros = {}
     for col in colunas_disponiveis:
@@ -110,22 +107,7 @@ if uploaded_files:
         </div>
         """, unsafe_allow_html=True)
 
-    if 'Especialidade' in df_final.columns:
-        especialidades = df_final['Especialidade'].dropna().unique()
-        cols = st.columns(min(len(especialidades), 4))
-        for idx, esp in enumerate(especialidades):
-            total = df_final[df_final['Especialidade'] == esp].shape[0]
-            with cols[idx % 4]:
-                st.markdown(f"""
-                    <div style="padding:18px; margin-bottom:18px; background-color:#e6f9f0;
-                                border-left:7px solid #009688; border-radius:12px;
-                                font-size:20px; font-weight:bold; color:#009688;
-                                box-shadow: 0 2px 8px rgba(0,150,136,0.09); text-align:center;">
-                        💼<br>{esp}<br><span style="font-size:28px; color:#222;">{total}</span>
-                    </div>
-                """, unsafe_allow_html=True)
-
-    colunas_para_analisar = ['Especialidade', 'Motivo Alta', 'Usuário', 'Profissional', 'Prioridade', 'Cid10', 'Procedimento']
+    colunas_para_analisar = ['Especialidade', 'Motivo Alta', 'Profissional', 'Prioridade', 'Cid10', 'Procedimento']
     top_n = st.sidebar.slider("Número de itens no gráfico", 5, 20, 10)
     tipo_grafico = st.sidebar.selectbox("Tipo de gráfico", ["Barras", "Pizza"])
 
@@ -174,6 +156,7 @@ if uploaded_files:
         st.dataframe(resumo_esp)
 
     st.success("✅ Análise concluída com sucesso!")
+
 
 
 
