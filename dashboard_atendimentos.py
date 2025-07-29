@@ -135,7 +135,17 @@ if uploaded_files:
         fig_semana = px.line(semana, x='Semana', y='Quantidade', title='Atendimentos por Semana')
         st.plotly_chart(fig_semana, use_container_width=True)
 
-        df_final['Dia da Semana'] = df_final['Data Atendimento'].dt.day_name(locale='pt_BR').fillna("Indefinido").str.lower()
+        dias_semana_pt = {
+            'Monday': 'segunda-feira',
+            'Tuesday': 'terça-feira',
+            'Wednesday': 'quarta-feira',
+            'Thursday': 'quinta-feira',
+            'Friday': 'sexta-feira',
+            'Saturday': 'sábado',
+            'Sunday': 'domingo'
+        }
+
+        df_final['Dia da Semana'] = df_final['Data Atendimento'].dt.day_name().map(dias_semana_pt).fillna("Indefinido")
         ordem_dias = ['segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado', 'domingo']
         df_final['Dia da Semana'] = pd.Categorical(df_final['Dia da Semana'], categories=ordem_dias, ordered=True)
 
