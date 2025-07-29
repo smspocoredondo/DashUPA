@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from datetime import date
 
 # 📋 Configuração da Página
 title = 'Análises de Atendimentos - UPA 24H Dona Zulmira Soares'
@@ -8,7 +9,7 @@ st.set_page_config(page_title=title, layout='wide')
 st.image('TESTEIRA PAINEL UPA1.png', width=100)
 st.title(title)
 
-# 📁 Sidebar - Upload e Filtros
+# 📋 Sidebar - Upload e Filtros
 st.sidebar.image('TESTEIRA PAINEL UPA1.png', width=350)
 st.sidebar.header('Filtros')
 uploaded_files = st.sidebar.file_uploader(
@@ -122,8 +123,10 @@ if uploaded_files:
                 st.plotly_chart(grafico, use_container_width=True)
 
     if 'Data Atendimento' in df_final.columns:
-        data_min, data_max = st.sidebar.date_input("Intervalo de Datas", [])
-        if data_min and data_max:
+        data_intervalo = st.sidebar.date_input("Intervalo de Datas", value=(date(2025, 2, 1), date(2025, 7, 31)))
+
+        if isinstance(data_intervalo, tuple) and len(data_intervalo) == 2:
+            data_min, data_max = data_intervalo
             df_final = df_final[(df_final['Data Atendimento'] >= pd.to_datetime(data_min)) &
                                 (df_final['Data Atendimento'] <= pd.to_datetime(data_max))]
 
@@ -156,6 +159,7 @@ if uploaded_files:
         st.dataframe(resumo_esp)
 
     st.success("✅ Análise concluída com sucesso!")
+
 
 
 
