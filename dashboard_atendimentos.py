@@ -146,7 +146,7 @@ if uploaded_files:
         }
 
         df_final['Dia da Semana'] = df_final['Data Atendimento'].dt.day_name().map(dias_semana_pt).fillna("Indefinido")
-        ordem_dias = ['segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado', 'domingo']
+        ordem_dias = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado']
         df_final['Dia da Semana'] = pd.Categorical(df_final['Dia da Semana'], categories=ordem_dias, ordered=True)
 
         fig_turno = px.histogram(df_final, x='Dia da Semana', color='Turno', barmode='group',
@@ -169,6 +169,7 @@ if uploaded_files:
         st.dataframe(resumo_esp)
 
     st.success("✅ Análise concluída com sucesso!")
+
 
 
 
