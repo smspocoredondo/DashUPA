@@ -26,149 +26,155 @@ def processar_planilha(file):
     ]
     return df_raw
 
-# 📊 Função para gráfico de barras
+# 📊 Funções de gráficos
 def criar_grafico_barra(df, coluna, titulo, top_n=10):
-    if coluna in df.columns:
-        contagem = df[coluna].value_counts().reset_index()
-        contagem.columns = [coluna, 'Quantidade']
-        grafico = px.bar(
-            contagem.head(top_n),
-            x=coluna,
-            y='Quantidade',
-            title=titulo,
-            color='Quantidade',
-            color_continuous_scale=['#e0f2f1', '#4dd0e1', '#009688']
-        )
-        grafico.update_layout(
-            title_font=dict(size=20, color='#009688'),
-            xaxis_title_font=dict(size=14),
-            yaxis_title_font=dict(size=14),
-            template='plotly_white'
-        )
-        return grafico
-    return None
+    contagem = df[coluna].value_counts().reset_index()
+    contagem.columns = [coluna, 'Quantidade']
+    return px.bar(
+        contagem.head(top_n),
+        x=coluna,
+        y='Quantidade',
+        title=titulo,
+        color='Quantidade',
+        template='plotly_white'
+    )
 
-# 📊 Função para gráfico de pizza
 def criar_grafico_pizza(df, coluna, titulo, top_n=10):
-    if coluna in df.columns:
-        contagem = df[coluna].value_counts().reset_index()
-        contagem.columns = [coluna, 'Quantidade']
-        grafico = px.pie(
-            contagem.head(top_n),
-            names=coluna,
-            values='Quantidade',
-            title=titulo,
-            color_discrete_sequence=['#e0f2f1', '#4dd0e1', '#009688', '#b2dfdb', '#80cbc4']
-        )
-        grafico.update_layout(
-            title_font=dict(size=20, color='#009688'),
-            template='plotly_white'
-        )
-        return grafico
-    return None
+    contagem = df[coluna].value_counts().reset_index()
+    contagem.columns = [coluna, 'Quantidade']
+    return px.pie(
+        contagem.head(top_n),
+        names=coluna,
+        values='Quantidade',
+        title=titulo
+    )
 
-# ⚛️ Processamento ao carregar arquivos
+# ⚛️ Processamento
 if uploaded_files:
     dataframes = [processar_planilha(file) for file in uploaded_files]
     df_final = pd.concat(dataframes, ignore_index=True)
 
-    colunas_disponiveis = df_final.columns.tolist()
-    filtros = {}
-    for col in colunas_disponiveis:
-        try:
-            valores_unicos = df_final[col].dropna().unique().tolist()
-            if len(valores_unicos) > 0:
-                filtros[col] = st.sidebar.multiselect(f'Filtrar por {col}', valores_unicos)
-        except Exception as e:
-            st.sidebar.warning(f"Erro ao processar filtro para a coluna '{col}': {e}")
+    # ---------------- FILTROS ----------------
+    for col in df_final.columns:
+        valores = df_final[col].dropna().unique()
+        if len(valores) > 0:
+            filtro = st.sidebar.multiselect(f'Filtrar por {col}', valores)
+            if filtro:
+                df_final = df_final[df_final[col].isin(filtro)]
 
-    for coluna, filtro in filtros.items():
-        if filtro:
-            df_final = df_final[df_final[coluna].isin(filtro)]
+    # ---------------- DATA / TURNO ----------------
+    df_final['Data Atendimento'] = pd.to_datetime(df_final['Data'], errors='coerce')
+    df_final['Hora'] = pd.to_datetime(df_final['Hora'], errors='coerce').dt.hour
 
-    if 'Data' in df_final.columns:
-        df_final['Data Atendimento'] = pd.to_datetime(df_final['Data'], errors='coerce')
-        df_final['Hora'] = pd.to_datetime(df_final['Hora'], errors='coerce').dt.hour
+    def identificar_turno(h):
+        if pd.isnull(h): return 'Indefinido'
+        if 6 <= h < 12: return 'Manhã'
+        if 12 <= h < 18: return 'Tarde'
+        if 18 <= h < 24: return 'Noite'
+        return 'Madrugada'
 
-        def identificar_turno(hora):
-            if pd.isnull(hora): return 'Indefinido'
-            if 6 <= hora < 12: return 'Manhã (06h-12h)'
-            elif 12 <= hora < 18: return 'Tarde (12h-18h)'
-            elif 18 <= hora < 24: return 'Noite (18h-00h)'
-            else: return 'Madrugada (00h-06h)'
+    df_final['Turno'] = df_final['Hora'].apply(identificar_turno)
 
-        df_final['Turno'] = df_final['Hora'].apply(identificar_turno)
+    # ==========================
+    # 🔎 RESOLUTIVIDADE – SUS
+    # ==========================
+    def classificar_resolutividade(motivo):
+        if pd.isnull(motivo):
+            return 'Indefinido'
+        m = str(motivo).lower()
+        if any(x in m for x in ['alta', 'prescrição', 'observação', 'encerramento']):
+            return 'Resolvido na UPA'
+        if any(x in m for x in ['transfer', 'óbito', 'regulado']):
+            return 'Não resolvido na UPA'
+        return 'Indefinido'
 
-    st.markdown(f"""
-        <div style="padding:22px; margin-bottom:24px; background-color:#e0f7fa; 
-                    border-left:10px solid #009688; border-radius:14px; 
-                    font-size:28px; font-weight:bold; color:#009688; 
-                    box-shadow: 0 2px 12px rgba(0,150,136,0.10); text-align:center;">
-            🏥 Total Geral de Atendimentos: {len(df_final)}
-        </div>
-        """, unsafe_allow_html=True)
+    df_final['Resolutividade'] = df_final['Motivo Alta'].apply(classificar_resolutividade)
 
+    # ---------------- INDICADORES ----------------
+    total = len(df_final)
+    taxa_resolucao = len(df_final[df_final['Resolutividade'] == 'Resolvido na UPA']) / total
+
+    df_final = df_final.sort_values(['CPF', 'Data Atendimento'])
+    df_final['Retorno_72h'] = (
+        df_final.groupby('CPF')['Data Atendimento']
+        .diff().dt.total_seconds().div(3600).le(72)
+    )
+    taxa_retorno = df_final['Retorno_72h'].mean()
+
+    amarelos = df_final[df_final['Prioridade'].str.contains('Amarelo', case=False, na=False)]
+    taxa_amarelo = (
+        len(amarelos[amarelos['Resolutividade'] == 'Resolvido na UPA']) / len(amarelos)
+        if len(amarelos) > 0 else 0
+    )
+
+    perfil = df_final['Prioridade'].value_counts(normalize=True) * 100
+    verde_azul = perfil.filter(like='Verde').sum() + perfil.filter(like='Azul').sum()
+
+    score = taxa_resolucao * 0.4 + (1 - taxa_retorno) * 0.2 + taxa_amarelo * 0.4
+
+    if score >= 0.80:
+        status = '🟢 UPA RESOLUTIVA'
+    elif score >= 0.60:
+        status = '🟡 PARCIALMENTE RESOLUTIVA'
+    else:
+        status = '🔴 BAIXA RESOLUTIVIDADE'
+
+    # ==========================
+    # PAINEL GERENCIAL
+    # ==========================
+    st.markdown("## 🏥 Avaliação de Resolutividade – SUS")
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Resolução na UPA", f"{taxa_resolucao:.1%}", "≥ 85%")
+    c2.metric("Retorno até 72h", f"{taxa_retorno:.1%}", "< 5%")
+    c3.metric("Resolução Amarelos", f"{taxa_amarelo:.1%}", "≥ 80%")
+    c4.metric("Score Geral", f"{score:.2f}", status)
+
+    if verde_azul > 60:
+        st.warning(f"⚠️ {verde_azul:.1f}% dos atendimentos são Verde/Azul — indício de sobrecarga da Atenção Básica.")
+
+    fig_res = px.histogram(
+        df_final,
+        x='Resolutividade',
+        color='Prioridade',
+        barmode='group',
+        title='Desfecho dos Atendimentos por Classificação de Risco'
+    )
+    st.plotly_chart(fig_res, use_container_width=True)
+
+    # ==========================
+    # ANÁLISES EXISTENTES
+    # ==========================
     colunas_para_analisar = ['Especialidade', 'Motivo Alta', 'Profissional', 'Prioridade', 'Cid10', 'Procedimento']
     top_n = st.sidebar.slider("Número de itens no gráfico", 5, 20, 10)
     tipo_grafico = st.sidebar.selectbox("Tipo de gráfico", ["Barras", "Pizza"])
 
     for col in colunas_para_analisar:
-        if col in df_final.columns:
-            st.subheader(f"Análises para {col}")
-            if tipo_grafico == "Barras":
-                grafico = criar_grafico_barra(df_final, col, f'Top {top_n} {col} Mais Frequentes', top_n)
-            else:
-                grafico = criar_grafico_pizza(df_final, col, f'Top {top_n} {col} Mais Frequentes', top_n)
-            if grafico:
-                st.plotly_chart(grafico, use_container_width=True)
+        st.subheader(f"Análises para {col}")
+        if tipo_grafico == "Barras":
+            st.plotly_chart(criar_grafico_barra(df_final, col, f'Top {top_n} {col}', top_n), use_container_width=True)
+        else:
+            st.plotly_chart(criar_grafico_pizza(df_final, col, f'Top {top_n} {col}', top_n), use_container_width=True)
 
-    if 'Data Atendimento' in df_final.columns:
-        data_intervalo = st.sidebar.date_input("Intervalo de Datas", value=(date(2025, 2, 1), date(2025, 7, 31)))
+    # ==========================
+    # CONCLUSÃO TÉCNICA
+    # ==========================
+    st.markdown(f"""
+### 📝 Conclusão Técnica
 
-        if isinstance(data_intervalo, tuple) and len(data_intervalo) == 2:
-            data_min, data_max = data_intervalo
-            df_final = df_final[(df_final['Data Atendimento'] >= pd.to_datetime(data_min)) &
-                                (df_final['Data Atendimento'] <= pd.to_datetime(data_max))]
+Com base nos indicadores analisados, a **UPA Dona Zulmira Soares** apresenta:
 
-        df_final['Semana'] = df_final['Data Atendimento'].dt.to_period('W').astype(str)
-        semana = df_final.groupby('Semana').size().reset_index(name='Quantidade')
-        fig_semana = px.line(semana, x='Semana', y='Quantidade', title='Atendimentos por Semana')
-        st.plotly_chart(fig_semana, use_container_width=True)
+- **Taxa de resolução:** {taxa_resolucao:.1%}  
+- **Retorno em até 72h:** {taxa_retorno:.1%}  
+- **Score de resolutividade:** {score:.2f}  
 
-        dias_semana_pt = {
-            'Monday': 'segunda-feira',
-            'Tuesday': 'terça-feira',
-            'Wednesday': 'quarta-feira',
-            'Thursday': 'quinta-feira',
-            'Friday': 'sexta-feira',
-            'Saturday': 'sábado',
-            'Sunday': 'domingo'
-        }
+**Classificação final:** **{status}**
 
-        df_final['Dia da Semana'] = df_final['Data Atendimento'].dt.day_name().map(dias_semana_pt).fillna("Indefinido")
-        ordem_dias = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado']
-        df_final['Dia da Semana'] = pd.Categorical(df_final['Dia da Semana'], categories=ordem_dias, ordered=True)
-
-        fig_turno = px.histogram(df_final, x='Dia da Semana', color='Turno', barmode='group',
-                                 title='Distribuição de Atendimentos por Dia da Semana e Turno')
-        st.plotly_chart(fig_turno, use_container_width=True)
-
-    if 'Hora' in df_final.columns:
-        fig_hora = px.histogram(df_final, x='Hora', nbins=24, title='Distribuição de Atendimentos por Hora')
-        st.plotly_chart(fig_hora, use_container_width=True)
-
-    if 'Especialidade' in df_final.columns and 'Prioridade' in df_final.columns:
-        fig_stack = px.histogram(df_final, x='Especialidade', color='Prioridade', barmode='stack',
-                                 title='Prioridade por Especialidade')
-        st.plotly_chart(fig_stack, use_container_width=True)
-
-    if 'Especialidade' in df_final.columns:
-        st.subheader("Resumo por Especialidade")
-        resumo_esp = df_final['Especialidade'].value_counts().reset_index()
-        resumo_esp.columns = ['Especialidade', 'Quantidade']
-        st.dataframe(resumo_esp)
+Avaliação fundamentada na Política Nacional de Atenção às Urgências (PNAU) e normas do SUS.
+""")
 
     st.success("✅ Análise concluída com sucesso!")
+
 
 
 
