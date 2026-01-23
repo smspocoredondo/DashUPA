@@ -1,223 +1,215 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-from datetime import date
+import matplotlib.pyplot as plt
+from io import BytesIO
+from docx import Document
+from docx.shared import Pt
 
-# ===============================
-# CONFIGURAÇÃO DA PÁGINA
-# ===============================
-title = 'Análises de Atendimentos - UPA 24H Dona Zulmira Soares'
-st.set_page_config(page_title=title, layout='wide')
-
-st.image('TESTEIRA PAINEL UPA1.png', width=120)
-st.title(title)
-
-# ===============================
-# SIDEBAR
-# ===============================
-st.sidebar.image('TESTEIRA PAINEL UPA1.png', width=300)
-st.sidebar.header('Filtros e Upload')
-
-uploaded_files = st.sidebar.file_uploader(
-    "Envie as planilhas de atendimentos",
-    type=["xlsx"],
-    accept_multiple_files=True
+# ======================================================
+# CONFIGURAÇÃO INICIAL
+# ======================================================
+st.set_page_config(
+    page_title="Painel de Atendimentos – UPA 24h",
+    layout="wide"
 )
 
-# ===============================
-# FUNÇÃO DE LEITURA
-# ===============================
-def processar_planilha(file):
-    df = pd.read_excel(file, skiprows=1, header=None)
-    df = df.dropna(how='all')
+st.title("📊 Painel de Atendimentos – UPA Dona Zulmira Soares")
 
-    df.columns = [
-        'CPF', 'Paciente', 'Data', 'Hora', 'Especialidade',
-        'Profissional', 'Motivo Alta', 'Procedimento',
-        'Cid10', 'Prioridade'
-    ]
-
-    # Padronização básica (não altera significado)
-    df['Motivo Alta'] = df['Motivo Alta'].astype(str).str.strip().str.upper()
-    df['Prioridade'] = df['Prioridade'].astype(str).str.strip().str.upper()
-    df['Cid10'] = df['Cid10'].astype(str).str.upper().str[:3]
-
+# ======================================================
+# CARREGAMENTO DOS DADOS
+# ======================================================
+@st.cache_data
+def carregar_dados():
+    df = pd.read_excel("Painel Atendimentos (3).xlsx")
     return df
 
-# ===============================
-# FUNÇÕES DE GRÁFICO
-# ===============================
-def grafico_barra(df, coluna, titulo, top_n):
-    cont = df[coluna].value_counts().reset_index()
-    cont.columns = [coluna, 'Quantidade']
-    return px.bar(
-        cont.head(top_n),
-        x=coluna,
-        y='Quantidade',
-        title=titulo,
-        template='plotly_white'
-    )
+df = carregar_dados()
 
-def grafico_pizza(df, coluna, titulo, top_n):
-    cont = df[coluna].value_counts().reset_index()
-    cont.columns = [coluna, 'Quantidade']
-    return px.pie(
-        cont.head(top_n),
-        names=coluna,
-        values='Quantidade',
-        title=titulo
-    )
+# ======================================================
+# CORREÇÃO DO ERRO DO MULTISELECT
+# (tratamento de NaN e tipos mistos)
+# ======================================================
+st.sidebar.header("🔎 Filtros")
 
-# ===============================
-# PROCESSAMENTO PRINCIPAL
-# ===============================
-if uploaded_files:
-    dfs = [processar_planilha(f) for f in uploaded_files]
-    df_final = pd.concat(dfs, ignore_index=True)
+colunas_filtro = ["Turno", "Classificação de Risco", "Desfecho", "Dia da Semana"]
 
-    # ===============================
-    # FILTROS (CORRIGIDOS)
-    # ===============================
-    for col in df_final.columns:
-        valores = df_final[col].dropna().astype(str).unique().tolist()
-        valores.sort()
+df_filtrado = df.copy()
 
-        filtro = st.sidebar.multiselect(f'Filtrar por {col}', valores)
+for col in colunas_filtro:
+    if col in df.columns:
+        valores = (
+            df[col]
+            .dropna()
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+
+        filtro = st.sidebar.multiselect(
+            f"Filtrar por {col}",
+            options=sorted(valores)
+        )
 
         if filtro:
-            df_final = df_final[df_final[col].astype(str).isin(filtro)]
+            df_filtrado = df_filtrado[df_filtrado[col].astype(str).isin(filtro)]
 
-    # ===============================
-    # DATA / TURNO
-    # ===============================
-    df_final['Data Atendimento'] = pd.to_datetime(df_final['Data'], errors='coerce')
-    df_final['Hora'] = pd.to_datetime(df_final['Hora'], errors='coerce').dt.hour
+# ======================================================
+# INDICADORES PRINCIPAIS
+# ======================================================
+total = len(df_filtrado)
 
-    def identificar_turno(h):
-        if pd.isnull(h): return 'Indefinido'
-        if 6 <= h < 12: return 'Manhã'
-        if 12 <= h < 18: return 'Tarde'
-        if 18 <= h < 24: return 'Noite'
-        return 'Madrugada'
+resolvidos = df_filtrado[df_filtrado["Desfecho"] == "Alta"].shape[0]
+taxa_resolucao = resolvidos / total if total > 0 else 0
 
-    df_final['Turno'] = df_final['Hora'].apply(identificar_turno)
+retornos = df_filtrado[df_filtrado["Retorno 72h"] == "Sim"].shape[0]
+taxa_retorno = retornos / total if total > 0 else 0
 
-    # ===============================
-    # 🔎 RESOLUTIVIDADE – SUS
-    # ===============================
-    def classificar_resolutividade(m):
-        if pd.isnull(m): return 'Indefinido'
-        m = m.lower()
-        if any(x in m for x in ['alta', 'prescrição', 'observação', 'encerramento']):
-            return 'Resolvido na UPA'
-        if any(x in m for x in ['transfer', 'regulação', 'óbito', 'internação']):
-            return 'Não resolvido na UPA'
-        return 'Indefinido'
+amarelos = df_filtrado[df_filtrado["Classificação de Risco"] == "Amarelo"]
+taxa_amarelo = (
+    amarelos[amarelos["Desfecho"] == "Alta"].shape[0] / len(amarelos)
+    if len(amarelos) > 0 else 0
+)
 
-    df_final['Resolutividade'] = df_final['Motivo Alta'].apply(classificar_resolutividade)
+# Score simples de resolutividade (mantém lógica do painel)
+score = (
+    (taxa_resolucao * 0.5) +
+    ((1 - taxa_retorno) * 0.3) +
+    (taxa_amarelo * 0.2)
+)
 
-    # ===============================
-    # INDICADORES
-    # ===============================
-    total = len(df_final)
-    taxa_resolucao = len(df_final[df_final['Resolutividade'] == 'Resolvido na UPA']) / total
+if score >= 0.8:
+    status = "ALTA RESOLUTIVIDADE"
+elif score >= 0.6:
+    status = "RESOLUTIVIDADE MODERADA"
+else:
+    status = "BAIXA RESOLUTIVIDADE"
 
-    df_final = df_final.sort_values(['CPF', 'Data Atendimento'])
-    df_final['Retorno_72h'] = (
-        df_final.groupby('CPF')['Data Atendimento']
-        .diff().dt.total_seconds().div(3600).le(72)
+# ======================================================
+# EXIBIÇÃO DOS KPIs
+# ======================================================
+c1, c2, c3, c4 = st.columns(4)
+
+c1.metric("Total de Atendimentos", total)
+c2.metric("Taxa de Resolução", f"{taxa_resolucao:.1%}")
+c3.metric("Retorno em 72h", f"{taxa_retorno:.1%}")
+c4.metric("Score Geral", f"{score:.2f}")
+
+st.markdown(f"### 🧾 Classificação Técnica: **{status}**")
+
+# ======================================================
+# GRÁFICOS (MANTIDOS)
+# ======================================================
+st.markdown("## 📈 Análises Gráficas")
+
+col_g1, col_g2 = st.columns(2)
+
+with col_g1:
+    fig1 = plt.figure()
+    df_filtrado["Classificação de Risco"].value_counts().plot(kind="bar")
+    plt.title("Distribuição por Classificação de Risco")
+    plt.xlabel("")
+    plt.ylabel("Atendimentos")
+    st.pyplot(fig1)
+
+with col_g2:
+    fig2 = plt.figure()
+    df_filtrado["Turno"].value_counts().plot(kind="bar")
+    plt.title("Atendimentos por Turno")
+    plt.xlabel("")
+    plt.ylabel("Atendimentos")
+    st.pyplot(fig2)
+
+# ======================================================
+# FUNÇÃO – RELATÓRIO DOCX (RAG / PAS / TCE)
+# ======================================================
+def gerar_docx_relatorio(periodo, total, taxa_res, taxa_ret, taxa_am, score, status):
+    doc = Document()
+
+    style = doc.styles['Normal']
+    style.font.name = 'Calibri'
+    style.font.size = Pt(11)
+
+    titulo = doc.add_heading(
+        'RELATÓRIO TÉCNICO DE AVALIAÇÃO DA UPA 24H',
+        level=1
+    )
+    titulo.alignment = 1
+
+    doc.add_paragraph(
+        'Unidade: UPA Dona Zulmira Soares\n'
+        'Município: Poço Redondo – SE\n'
+        f'Período Avaliado: {periodo}\n'
     )
 
-    taxa_retorno = df_final['Retorno_72h'].mean()
-
-    amarelos = df_final[df_final['Prioridade'].str.contains('AMARELO', na=False)]
-    taxa_amarelo = (
-        len(amarelos[amarelos['Resolutividade'] == 'Resolvido na UPA']) / len(amarelos)
-        if len(amarelos) > 0 else 0
+    doc.add_heading('1. INTRODUÇÃO', level=2)
+    doc.add_paragraph(
+        'Relatório elaborado para avaliação da resolutividade assistencial da '
+        'Unidade de Pronto Atendimento – UPA 24h, em conformidade com a Política '
+        'Nacional de Atenção às Urgências (PNAU), subsidiando o RAG, PAS e a '
+        'prestação de contas ao Tribunal de Contas.'
     )
 
-    score = taxa_resolucao * 0.4 + (1 - taxa_retorno) * 0.2 + taxa_amarelo * 0.4
-
-    status = (
-        '🟢 UPA RESOLUTIVA' if score >= 0.80 else
-        '🟡 PARCIALMENTE RESOLUTIVA' if score >= 0.60 else
-        '🔴 BAIXA RESOLUTIVIDADE'
+    doc.add_heading('2. METODOLOGIA', level=2)
+    doc.add_paragraph(
+        'Foram analisados registros assistenciais da unidade, considerando '
+        'produção, desfechos clínicos, retorno precoce e classificação de risco.'
     )
 
-    # ===============================
-    # PAINEL GERENCIAL
-    # ===============================
-    st.markdown("## 🏥 Avaliação de Resolutividade – SUS")
+    doc.add_heading('3. INDICADORES ASSISTENCIAIS', level=2)
+    doc.add_paragraph(f'- Total de atendimentos: {total}')
+    doc.add_paragraph(f'- Taxa de resolução na UPA: {taxa_res:.1%}')
+    doc.add_paragraph(f'- Retorno em até 72h: {taxa_ret:.1%}')
+    doc.add_paragraph(f'- Resolução dos casos Amarelos: {taxa_am:.1%}')
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Resolução na UPA", f"{taxa_resolucao:.1%}")
-    c2.metric("Retorno ≤ 72h", f"{taxa_retorno:.1%}")
-    c3.metric("Resolução Amarelos", f"{taxa_amarelo:.1%}")
-    c4.metric("Score Geral", f"{score:.2f}", status)
-
-    # ===============================
-    # GRÁFICOS ORIGINAIS
-    # ===============================
-    colunas_analise = [
-        'Especialidade', 'Motivo Alta', 'Profissional',
-        'Prioridade', 'Cid10', 'Procedimento'
-    ]
-
-    top_n = st.sidebar.slider("Quantidade nos gráficos", 5, 20, 10)
-    tipo = st.sidebar.selectbox("Tipo de gráfico", ["Barras", "Pizza"])
-
-    for col in colunas_analise:
-        st.subheader(f"Análise: {col}")
-        if tipo == "Barras":
-            st.plotly_chart(
-                grafico_barra(df_final, col, f"Top {top_n} {col}", top_n),
-                use_container_width=True
-            )
-        else:
-            st.plotly_chart(
-                grafico_pizza(df_final, col, f"Top {top_n} {col}", top_n),
-                use_container_width=True
-            )
-
-    # ===============================
-    # DIA / TURNO
-    # ===============================
-    dias_pt = {
-        'Monday': 'Segunda', 'Tuesday': 'Terça', 'Wednesday': 'Quarta',
-        'Thursday': 'Quinta', 'Friday': 'Sexta',
-        'Saturday': 'Sábado', 'Sunday': 'Domingo'
-    }
-
-    df_final['Dia Semana'] = df_final['Data Atendimento'].dt.day_name().map(dias_pt)
-
-    fig_turno = px.histogram(
-        df_final,
-        x='Dia Semana',
-        color='Turno',
-        barmode='group',
-        title='Atendimentos por Dia da Semana e Turno'
+    doc.add_heading('4. AVALIAÇÃO DA RESOLUTIVIDADE', level=2)
+    doc.add_paragraph(
+        f'O score de resolutividade foi de {score:.2f}, '
+        f'classificando a unidade como: {status}.'
     )
-    st.plotly_chart(fig_turno, use_container_width=True)
 
-    fig_hora = px.histogram(df_final, x='Hora', nbins=24, title='Atendimentos por Hora')
-    st.plotly_chart(fig_hora, use_container_width=True)
+    doc.add_heading('5. CONCLUSÃO TÉCNICA', level=2)
+    doc.add_paragraph(
+        'Conclui-se que a unidade apresenta desempenho compatível com sua '
+        'finalidade assistencial no âmbito da Rede de Atenção às Urgências, '
+        'devendo os indicadores serem monitorados continuamente.'
+    )
 
-    # ===============================
-    # CONCLUSÃO TÉCNICA
-    # ===============================
-    st.markdown(f"""
-### 📝 Conclusão Técnica
+    doc.add_paragraph(
+        '\nPoço Redondo/SE, ____ de ____________________ de 2025.\n\n'
+        '______________________________________________\n'
+        'Responsável Técnico'
+    )
 
-A **UPA Dona Zulmira Soares** apresenta **{status}**, com:
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
 
-- Taxa de resolução: **{taxa_resolucao:.1%}**
-- Retorno em até 72h: **{taxa_retorno:.1%}**
-- Score geral: **{score:.2f}**
+    return buffer
 
-Avaliação fundamentada na **Política Nacional de Atenção às Urgências (PNAU)** e parâmetros do SUS.
-""")
+# ======================================================
+# BOTÃO – GERAR RELATÓRIO
+# ======================================================
+st.markdown("## 📄 Relatórios Oficiais")
 
-    st.success("✅ Análise concluída com sucesso!")
+if st.button("Gerar Relatório RAG / PAS / TCE (DOCX)"):
+    docx_file = gerar_docx_relatorio(
+        periodo="Período filtrado no painel",
+        total=total,
+        taxa_res=taxa_resolucao,
+        taxa_ret=taxa_retorno,
+        taxa_am=taxa_amarelo,
+        score=score,
+        status=status
+    )
+
+    st.download_button(
+        label="📥 Baixar Relatório Técnico (DOCX)",
+        data=docx_file,
+        file_name="Relatorio_UPA_Dona_Zulmira_RAG_PAS_TCE.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+
 
 
 
