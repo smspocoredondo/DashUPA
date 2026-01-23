@@ -1,68 +1,69 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import date
 
-# 📋 Configuração da Página
-title = 'Análises de Atendimentos - UPA 24H Dona Zulmira Soares'
-st.set_page_config(page_title=title, layout='wide')
-st.image('TESTEIRA PAINEL UPA1.png', width=100)
-st.title(title)
-
-# 📋 Sidebar - Upload e Filtros
-st.sidebar.image('TESTEIRA PAINEL UPA1.png', width=350)
-st.sidebar.header('Filtros')
-uploaded_files = st.sidebar.file_uploader(
-    "Envie as planilhas de atendimentos", type=["xlsx"], accept_multiple_files=True
+# ===============================
+# CONFIGURAÇÃO DA PÁGINA
+# ===============================
+st.set_page_config(
+    page_title='Painel de Resolutividade – UPA Dona Zulmira Soares',
+    layout='wide'
 )
 
-# 🔍 Função para processar planilha
+st.image('TESTEIRA PAINEL UPA1.png', width=120)
+st.title('Painel de Avaliação de Resolutividade – UPA 24h Dona Zulmira Soares')
+
+# ===============================
+# SIDEBAR
+# ===============================
+st.sidebar.image('TESTEIRA PAINEL UPA1.png', width=300)
+st.sidebar.header('Upload e Filtros')
+
+uploaded_files = st.sidebar.file_uploader(
+    'Envie as planilhas de atendimentos',
+    type=['xlsx'],
+    accept_multiple_files=True
+)
+
+# ===============================
+# FUNÇÃO DE LEITURA DA PLANILHA
+# ===============================
 def processar_planilha(file):
-    df_raw = pd.read_excel(file, skiprows=1, header=None)
-    df_raw = df_raw.dropna(how='all')
-    df_raw.columns = [
-        'CPF', 'Paciente', 'Data', 'Hora', 'Especialidade', 'Profissional',
-        'Motivo Alta', 'Procedimento', 'Cid10', 'Prioridade'
+    df = pd.read_excel(file, skiprows=1, header=None)
+    df = df.dropna(how='all')
+
+    df.columns = [
+        'CPF', 'Paciente', 'Data', 'Hora', 'Especialidade',
+        'Profissional', 'Motivo Alta', 'Procedimento',
+        'Cid10', 'Prioridade'
     ]
-    return df_raw
 
-# 📊 Funções de gráficos
-def criar_grafico_barra(df, coluna, titulo, top_n=10):
-    contagem = df[coluna].value_counts().reset_index()
-    contagem.columns = [coluna, 'Quantidade']
-    return px.bar(
-        contagem.head(top_n),
-        x=coluna,
-        y='Quantidade',
-        title=titulo,
-        color='Quantidade',
-        template='plotly_white'
-    )
+    # Padronizações críticas
+    df['Motivo Alta'] = df['Motivo Alta'].astype(str).str.strip().str.upper()
+    df['Prioridade'] = df['Prioridade'].astype(str).str.strip().str.upper()
+    df['Cid10'] = df['Cid10'].astype(str).str.upper().str[:3]
 
-def criar_grafico_pizza(df, coluna, titulo, top_n=10):
-    contagem = df[coluna].value_counts().reset_index()
-    contagem.columns = [coluna, 'Quantidade']
-    return px.pie(
-        contagem.head(top_n),
-        names=coluna,
-        values='Quantidade',
-        title=titulo
-    )
+    return df
 
-# ⚛️ Processamento
+# ===============================
+# PROCESSAMENTO
+# ===============================
 if uploaded_files:
-    dataframes = [processar_planilha(file) for file in uploaded_files]
-    df_final = pd.concat(dataframes, ignore_index=True)
+    dfs = [processar_planilha(f) for f in uploaded_files]
+    df_final = pd.concat(dfs, ignore_index=True)
 
-    # ---------------- FILTROS ----------------
-    for col in df_final.columns:
-        valores = df_final[col].dropna().unique()
-        if len(valores) > 0:
-            filtro = st.sidebar.multiselect(f'Filtrar por {col}', valores)
-            if filtro:
-                df_final = df_final[df_final[col].isin(filtro)]
+    # -------------------------------
+    # FILTROS DINÂMICOS
+    # -------------------------------
+    for col in ['Especialidade', 'Profissional', 'Prioridade']:
+        valores = sorted(df_final[col].dropna().unique())
+        filtro = st.sidebar.multiselect(f'Filtrar por {col}', valores)
+        if filtro:
+            df_final = df_final[df_final[col].isin(filtro)]
 
-    # ---------------- DATA / TURNO ----------------
+    # -------------------------------
+    # DATA E TURNO
+    # -------------------------------
     df_final['Data Atendimento'] = pd.to_datetime(df_final['Data'], errors='coerce')
     df_final['Hora'] = pd.to_datetime(df_final['Hora'], errors='coerce').dt.hour
 
@@ -75,42 +76,76 @@ if uploaded_files:
 
     df_final['Turno'] = df_final['Hora'].apply(identificar_turno)
 
-    # ==========================
-    # 🔎 RESOLUTIVIDADE – SUS
-    # ==========================
+    # ===============================
+    # RESOLUTIVIDADE – REGRA REALISTA
+    # ===============================
     def classificar_resolutividade(motivo):
         if pd.isnull(motivo):
             return 'Indefinido'
-        m = str(motivo).lower()
-        if any(x in m for x in ['alta', 'prescrição', 'observação', 'encerramento']):
+
+        m = motivo.lower()
+
+        resolvido = [
+            'alta médica', 'alta com prescrição',
+            'alta após observação', 'encaminhado para ubs'
+        ]
+
+        nao_resolvido = [
+            'transferência', 'regulação',
+            'internação', 'óbito', 'evasão'
+        ]
+
+        if any(x in m for x in resolvido):
             return 'Resolvido na UPA'
-        if any(x in m for x in ['transfer', 'óbito', 'regulado']):
+        if any(x in m for x in nao_resolvido):
             return 'Não resolvido na UPA'
+
         return 'Indefinido'
 
     df_final['Resolutividade'] = df_final['Motivo Alta'].apply(classificar_resolutividade)
 
-    # ---------------- INDICADORES ----------------
+    # ===============================
+    # INDICADORES PRINCIPAIS
+    # ===============================
     total = len(df_final)
-    taxa_resolucao = len(df_final[df_final['Resolutividade'] == 'Resolvido na UPA']) / total
+
+    taxa_resolucao = (
+        len(df_final[df_final['Resolutividade'] == 'Resolvido na UPA']) / total
+    )
 
     df_final = df_final.sort_values(['CPF', 'Data Atendimento'])
     df_final['Retorno_72h'] = (
         df_final.groupby('CPF')['Data Atendimento']
         .diff().dt.total_seconds().div(3600).le(72)
     )
+
     taxa_retorno = df_final['Retorno_72h'].mean()
 
-    amarelos = df_final[df_final['Prioridade'].str.contains('Amarelo', case=False, na=False)]
+    amarelos = df_final[df_final['Prioridade'].str.contains('AMARELO', na=False)]
     taxa_amarelo = (
         len(amarelos[amarelos['Resolutividade'] == 'Resolvido na UPA']) / len(amarelos)
         if len(amarelos) > 0 else 0
     )
 
-    perfil = df_final['Prioridade'].value_counts(normalize=True) * 100
-    verde_azul = perfil.filter(like='Verde').sum() + perfil.filter(like='Azul').sum()
+    perfil_risco = df_final['Prioridade'].value_counts(normalize=True) * 100
+    verde_azul = perfil_risco.filter(like='VERDE').sum() + perfil_risco.filter(like='AZUL').sum()
 
-    score = taxa_resolucao * 0.4 + (1 - taxa_retorno) * 0.2 + taxa_amarelo * 0.4
+    # Transferência potencialmente evitável
+    transf_ev = df_final[
+        (df_final['Resolutividade'] == 'Não resolvido na UPA') &
+        (df_final['Prioridade'].str.contains('VERDE|AMARELO', na=False))
+    ]
+
+    taxa_transf_ev = len(transf_ev) / total
+
+    # ===============================
+    # SCORE DE RESOLUTIVIDADE
+    # ===============================
+    score = (
+        taxa_resolucao * 0.4 +
+        (1 - taxa_retorno) * 0.2 +
+        taxa_amarelo * 0.4
+    )
 
     if score >= 0.80:
         status = '🟢 UPA RESOLUTIVA'
@@ -119,61 +154,89 @@ if uploaded_files:
     else:
         status = '🔴 BAIXA RESOLUTIVIDADE'
 
-    # ==========================
+    # ===============================
     # PAINEL GERENCIAL
-    # ==========================
-    st.markdown("## 🏥 Avaliação de Resolutividade – SUS")
+    # ===============================
+    st.markdown('## 🏥 Indicadores de Resolutividade – SUS')
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Resolução na UPA", f"{taxa_resolucao:.1%}", "≥ 85%")
-    c2.metric("Retorno até 72h", f"{taxa_retorno:.1%}", "< 5%")
-    c3.metric("Resolução Amarelos", f"{taxa_amarelo:.1%}", "≥ 80%")
-    c4.metric("Score Geral", f"{score:.2f}", status)
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric('Resolução na UPA', f'{taxa_resolucao:.1%}', 'Meta ≥ 85%')
+    c2.metric('Retorno ≤ 72h', f'{taxa_retorno:.1%}', 'Ideal < 5%')
+    c3.metric('Resolução Amarelos', f'{taxa_amarelo:.1%}', 'Meta ≥ 80%')
+    c4.metric('Transferências Evitáveis', f'{taxa_transf_ev:.1%}', '< 10%')
+    c5.metric('Score Geral', f'{score:.2f}', status)
 
     if verde_azul > 60:
-        st.warning(f"⚠️ {verde_azul:.1f}% dos atendimentos são Verde/Azul — indício de sobrecarga da Atenção Básica.")
+        st.warning(
+            f'⚠️ {verde_azul:.1f}% dos atendimentos são Verde/Azul — possível sobrecarga da Atenção Básica.'
+        )
 
-    fig_res = px.histogram(
-        df_final,
-        x='Resolutividade',
-        color='Prioridade',
-        barmode='group',
-        title='Desfecho dos Atendimentos por Classificação de Risco'
+    # ===============================
+    # RESOLUTIVIDADE POR CID-10
+    # ===============================
+    st.markdown('## 🧬 Resolutividade por CID-10')
+
+    cid_res = (
+        df_final.groupby(['Cid10', 'Resolutividade'])
+        .size()
+        .unstack(fill_value=0)
     )
-    st.plotly_chart(fig_res, use_container_width=True)
 
-    # ==========================
-    # ANÁLISES EXISTENTES
-    # ==========================
-    colunas_para_analisar = ['Especialidade', 'Motivo Alta', 'Profissional', 'Prioridade', 'Cid10', 'Procedimento']
-    top_n = st.sidebar.slider("Número de itens no gráfico", 5, 20, 10)
-    tipo_grafico = st.sidebar.selectbox("Tipo de gráfico", ["Barras", "Pizza"])
+    cid_res['Taxa Resolutividade'] = (
+        cid_res.get('Resolvido na UPA', 0) /
+        cid_res.sum(axis=1)
+    )
 
-    for col in colunas_para_analisar:
-        st.subheader(f"Análises para {col}")
-        if tipo_grafico == "Barras":
-            st.plotly_chart(criar_grafico_barra(df_final, col, f'Top {top_n} {col}', top_n), use_container_width=True)
-        else:
-            st.plotly_chart(criar_grafico_pizza(df_final, col, f'Top {top_n} {col}', top_n), use_container_width=True)
+    st.dataframe(
+        cid_res.sort_values('Taxa Resolutividade', ascending=False).head(15),
+        use_container_width=True
+    )
 
-    # ==========================
+    # ===============================
+    # PRODUÇÃO POR PROFISSIONAL
+    # ===============================
+    st.markdown('## 👩‍⚕️ Produção por Profissional × Desfecho')
+
+    prof_res = (
+        df_final.groupby(['Profissional', 'Resolutividade'])
+        .size()
+        .unstack(fill_value=0)
+    )
+
+    st.dataframe(prof_res, use_container_width=True)
+
+    # ===============================
     # CONCLUSÃO TÉCNICA
-    # ==========================
+    # ===============================
+    if taxa_resolucao >= 0.85 and taxa_retorno < 0.05:
+        parecer = (
+            'A UPA apresenta adequada capacidade resolutiva, em conformidade '
+            'com a Política Nacional de Atenção às Urgências.'
+        )
+    elif taxa_resolucao >= 0.60:
+        parecer = (
+            'A UPA apresenta resolutividade parcial, sendo recomendados ajustes '
+            'organizacionais e clínico-assistenciais.'
+        )
+    else:
+        parecer = (
+            'A UPA apresenta baixa resolutividade, indicando necessidade de '
+            'reavaliação dos fluxos assistenciais e da articulação com a rede.'
+        )
+
     st.markdown(f"""
 ### 📝 Conclusão Técnica
 
-Com base nos indicadores analisados, a **UPA Dona Zulmira Soares** apresenta:
+**Classificação Final:** **{status}**
 
-- **Taxa de resolução:** {taxa_resolucao:.1%}  
-- **Retorno em até 72h:** {taxa_retorno:.1%}  
-- **Score de resolutividade:** {score:.2f}  
+{parecer}
 
-**Classificação final:** **{status}**
-
-Avaliação fundamentada na Política Nacional de Atenção às Urgências (PNAU) e normas do SUS.
+Avaliação baseada em indicadores assistenciais, conforme a PNAU e diretrizes do SUS,
+com dados extraídos dos registros reais de atendimento da unidade.
 """)
 
-    st.success("✅ Análise concluída com sucesso!")
+    st.success('✅ Avaliação concluída com sucesso.')
+
 
 
 
