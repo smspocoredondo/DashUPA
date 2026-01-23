@@ -37,6 +37,7 @@ def processar_planilha(file):
         'Cid10', 'Prioridade'
     ]
 
+    # Padronização básica (não altera significado)
     df['Motivo Alta'] = df['Motivo Alta'].astype(str).str.strip().str.upper()
     df['Prioridade'] = df['Prioridade'].astype(str).str.strip().str.upper()
     df['Cid10'] = df['Cid10'].astype(str).str.upper().str[:3]
@@ -44,17 +45,28 @@ def processar_planilha(file):
     return df
 
 # ===============================
-# GRÁFICOS PADRÃO
+# FUNÇÕES DE GRÁFICO
 # ===============================
 def grafico_barra(df, coluna, titulo, top_n):
     cont = df[coluna].value_counts().reset_index()
     cont.columns = [coluna, 'Quantidade']
-    return px.bar(cont.head(top_n), x=coluna, y='Quantidade', title=titulo, template='plotly_white')
+    return px.bar(
+        cont.head(top_n),
+        x=coluna,
+        y='Quantidade',
+        title=titulo,
+        template='plotly_white'
+    )
 
 def grafico_pizza(df, coluna, titulo, top_n):
     cont = df[coluna].value_counts().reset_index()
     cont.columns = [coluna, 'Quantidade']
-    return px.pie(cont.head(top_n), names=coluna, values='Quantidade', title=titulo)
+    return px.pie(
+        cont.head(top_n),
+        names=coluna,
+        values='Quantidade',
+        title=titulo
+    )
 
 # ===============================
 # PROCESSAMENTO PRINCIPAL
@@ -63,15 +75,21 @@ if uploaded_files:
     dfs = [processar_planilha(f) for f in uploaded_files]
     df_final = pd.concat(dfs, ignore_index=True)
 
-    # ---------------- FILTROS ----------------
+    # ===============================
+    # FILTROS (CORRIGIDOS)
+    # ===============================
     for col in df_final.columns:
-        valores = df_final[col].dropna().unique()
-        if len(valores) > 0:
-            filtro = st.sidebar.multiselect(f'Filtrar por {col}', sorted(valores))
-            if filtro:
-                df_final = df_final[df_final[col].isin(filtro)]
+        valores = df_final[col].dropna().astype(str).unique().tolist()
+        valores.sort()
 
-    # ---------------- DATA / TURNO ----------------
+        filtro = st.sidebar.multiselect(f'Filtrar por {col}', valores)
+
+        if filtro:
+            df_final = df_final[df_final[col].astype(str).isin(filtro)]
+
+    # ===============================
+    # DATA / TURNO
+    # ===============================
     df_final['Data Atendimento'] = pd.to_datetime(df_final['Data'], errors='coerce')
     df_final['Hora'] = pd.to_datetime(df_final['Hora'], errors='coerce').dt.hour
 
@@ -98,7 +116,9 @@ if uploaded_files:
 
     df_final['Resolutividade'] = df_final['Motivo Alta'].apply(classificar_resolutividade)
 
-    # ---------------- INDICADORES ----------------
+    # ===============================
+    # INDICADORES
+    # ===============================
     total = len(df_final)
     taxa_resolucao = len(df_final[df_final['Resolutividade'] == 'Resolvido na UPA']) / total
 
@@ -107,6 +127,7 @@ if uploaded_files:
         df_final.groupby('CPF')['Data Atendimento']
         .diff().dt.total_seconds().div(3600).le(72)
     )
+
     taxa_retorno = df_final['Retorno_72h'].mean()
 
     amarelos = df_final[df_final['Prioridade'].str.contains('AMARELO', na=False)]
@@ -135,20 +156,32 @@ if uploaded_files:
     c4.metric("Score Geral", f"{score:.2f}", status)
 
     # ===============================
-    # 🔥 GRÁFICOS E ANÁLISES ORIGINAIS
+    # GRÁFICOS ORIGINAIS
     # ===============================
-    colunas_analise = ['Especialidade', 'Motivo Alta', 'Profissional', 'Prioridade', 'Cid10', 'Procedimento']
+    colunas_analise = [
+        'Especialidade', 'Motivo Alta', 'Profissional',
+        'Prioridade', 'Cid10', 'Procedimento'
+    ]
+
     top_n = st.sidebar.slider("Quantidade nos gráficos", 5, 20, 10)
     tipo = st.sidebar.selectbox("Tipo de gráfico", ["Barras", "Pizza"])
 
     for col in colunas_analise:
         st.subheader(f"Análise: {col}")
         if tipo == "Barras":
-            st.plotly_chart(grafico_barra(df_final, col, f"Top {top_n} {col}", top_n), use_container_width=True)
+            st.plotly_chart(
+                grafico_barra(df_final, col, f"Top {top_n} {col}", top_n),
+                use_container_width=True
+            )
         else:
-            st.plotly_chart(grafico_pizza(df_final, col, f"Top {top_n} {col}", top_n), use_container_width=True)
+            st.plotly_chart(
+                grafico_pizza(df_final, col, f"Top {top_n} {col}", top_n),
+                use_container_width=True
+            )
 
-    # ---------------- DIA / TURNO ----------------
+    # ===============================
+    # DIA / TURNO
+    # ===============================
     dias_pt = {
         'Monday': 'Segunda', 'Tuesday': 'Terça', 'Wednesday': 'Quarta',
         'Thursday': 'Quinta', 'Friday': 'Sexta',
@@ -158,8 +191,11 @@ if uploaded_files:
     df_final['Dia Semana'] = df_final['Data Atendimento'].dt.day_name().map(dias_pt)
 
     fig_turno = px.histogram(
-        df_final, x='Dia Semana', color='Turno',
-        barmode='group', title='Atendimentos por Dia e Turno'
+        df_final,
+        x='Dia Semana',
+        color='Turno',
+        barmode='group',
+        title='Atendimentos por Dia da Semana e Turno'
     )
     st.plotly_chart(fig_turno, use_container_width=True)
 
@@ -178,10 +214,12 @@ A **UPA Dona Zulmira Soares** apresenta **{status}**, com:
 - Retorno em até 72h: **{taxa_retorno:.1%}**
 - Score geral: **{score:.2f}**
 
-Avaliação baseada na **Política Nacional de Atenção às Urgências (PNAU)** e parâmetros do SUS.
+Avaliação fundamentada na **Política Nacional de Atenção às Urgências (PNAU)** e parâmetros do SUS.
 """)
 
     st.success("✅ Análise concluída com sucesso!")
+
+
 
 
 
